@@ -1,0 +1,373 @@
+openapi: 3.0.3
+info:
+  title: HPKV Cloud API
+  description: API endpoints for interacting with an HPKV store, mirroring hpkvfs logic.
+  version: 0.1.0
+servers:
+  - url: /api # Relative path to the API routes within the Next.js app
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: hpkv-api-key
+      description: Your HPKV API Key.
+    ApiUrlAuth:
+      type: apiKey
+      in: header
+      name: hpkv-api-url
+      description: The base URL of your HPKV API endpoint (e.g., https://api-eu-1.hpkv.io).
+  schemas:
+    FileEntry:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the file or directory.
+        isDir:
+          type: boolean
+          description: True if the entry is a directory.
+    Metadata:
+      type: object
+      properties:
+        mode:
+          type: integer
+          format: int32
+          description: POSIX file mode.
+        uid:
+          type: integer
+          format: int32
+          description: User ID of the owner.
+        gid:
+          type: integer
+          format: int32
+          description: Group ID of the owner.
+        size:
+          type: integer
+          format: int64
+          description: File size in bytes.
+        atime:
+          type: integer
+          format: int64
+          description: Last access time (Unix timestamp).
+        mtime:
+          type: integer
+          format: int64
+          description: Last modification time (Unix timestamp).
+        ctime:
+          type: integer
+          format: int64
+          description: Last status change time (Unix timestamp).
+        num_chunks:
+          type: integer
+          format: int32
+          description: Number of chunks the file is split into.
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Description of the error.
+
+security:
+  - ApiKeyAuth: []
+  - ApiUrlAuth: []
+
+paths:
+  /metadata:
+    get:
+      summary: Get file or directory metadata
+      description: Retrieves the metadata object for a given path.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The absolute path of the file or directory (e.g., /myfolder/myfile.txt).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully retrieved metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metadata'
+        '400':
+          description: Bad Request (e.g., missing path).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized (missing or invalid API key/URL headers).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found (path does not exist).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /list:
+    get:
+      summary: List directory contents
+      description: Retrieves a list of files and subdirectories within a given directory path.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The absolute path of the directory to list (e.g., /myfolder).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully retrieved directory listing.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FileEntry'
+        '400':
+          description: Bad Request (e.g., missing path).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /read:
+    get:
+      summary: Read file content
+      description: Reads a specified range of bytes from a file.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The absolute path of the file to read.
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: true
+          description: The byte offset at which to start reading.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: size
+          in: query
+          required: true
+          description: The maximum number of bytes to read.
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+      responses:
+        '200':
+          description: Successfully read file content.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Bad Request (e.g., missing parameters, invalid offset/size, path is directory).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found (file does not exist).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /write:
+    post:
+      summary: Write file content
+      description: Writes data to a file at a specified offset. Creates the file if it doesn't exist. Expects base64 encoded data in the request body.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The absolute path of the file to write to.
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: true
+          description: The byte offset at which to start writing.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      requestBody:
+        description: Base64 encoded data to write.
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              format: base64
+      responses:
+        '200':
+          description: Successfully wrote data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bytesWritten:
+                    type: integer
+                    format: int32
+        '400':
+          description: Bad Request (e.g., missing parameters, invalid offset, invalid base64, path is directory).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error (e.g., failed to write chunk, failed to update metadata).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /delete:
+    delete:
+      summary: Delete file or directory
+      description: Deletes a file (including its chunks) or an empty directory.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The absolute path of the file or directory to delete. Cannot be root (/).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully deleted the path.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Bad Request (e.g., missing path, trying to delete root, directory not empty).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /mkdir:
+    post:
+      summary: Create directory
+      description: Creates a new directory at the specified path.
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: The absolute path of the directory to create. Should not end with a slash.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Directory already exists (idempotent success).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+        '201':
+          description: Successfully created the directory.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Bad Request (e.g., missing path, invalid path format).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict (path exists but is not a directory).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
