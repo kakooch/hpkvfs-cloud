@@ -1,6 +1,6 @@
 # HPKVFS Cloud
 
-This project provides a web-based interface (`hpkvfs-cloud`) for interacting with an HPKV (High Performance Key-Value) store, mirroring the filesystem logic implemented in the `hpkvfs` FUSE client.
+This project provides a web-based interface (`hpkvfs-cloud`) for interacting with an HPKV (High Performance Key-Value) store-  mirroring the filesystem logic implemented in the `hpkvfs` FUSE client.
 
 It allows users to log in using their HPKV API endpoint and key, browse the key-value store as a filesystem, view/edit text files, upload files, create directories, and delete files/directories.
 
